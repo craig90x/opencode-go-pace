@@ -1,14 +1,14 @@
 // ==UserScript==
 // @name         OpenCode Go 套餐用量节奏标尺
 // @namespace    openclaw.local.opencode-go-pace
-// @version      1.0.0
+// @version      1.0.1
 // @description  在 Go 套餐三条 usage 进度条上叠加「时间已过」刻度 + pace 差值，判断用量速度是偏快还是偏慢
-// @author       lokercy
+// @author       craig90x
 // @license      MIT
-// @homepageURL  https://github.com/lokercy/opencode-go-pace
-// @supportURL   https://github.com/lokercy/opencode-go-pace/issues
-// @downloadURL  https://raw.githubusercontent.com/lokercy/opencode-go-pace/main/opencode-go-pace.user.js
-// @updateURL    https://raw.githubusercontent.com/lokercy/opencode-go-pace/main/opencode-go-pace.user.js
+// @homepageURL  https://github.com/craig90x/opencode-go-pace
+// @supportURL   https://github.com/craig90x/opencode-go-pace/issues
+// @downloadURL  https://raw.githubusercontent.com/craig90x/opencode-go-pace/main/opencode-go-pace.user.js
+// @updateURL    https://raw.githubusercontent.com/craig90x/opencode-go-pace/main/opencode-go-pace.user.js
 // @match        https://opencode.ai/console/*
 // @run-at       document-idle
 // @grant        none
