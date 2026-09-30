@@ -1,55 +1,55 @@
 # opencode-go-pace
 
-给 [opencode.ai](https://opencode.ai) Console 的 **Go 套餐 usage 进度条**叠一条「时间已过」刻度 —— 一眼看出用量速度是偏快还是偏慢；并把**金额换算成输出 token**，对齐任务里实时滚动的输出词元。
+Overlays a **"time elapsed" tick** on the Go plan usage bars in the [opencode.ai](https://opencode.ai) Console — see at a glance whether you're burning quota faster or slower than the clock. It also converts **spend into output tokens**, so the number lines up with the output tokens streaming while a task runs.
 
 ```
 Rolling usage  4%  [-66pt]                 Resets in 1h 31m
 ██░░░░░░░░░░░░|░░░░░░░░░░░░░░░░░░░░░░░░░
-               ↑ 时间已过 71.2%
-剩 $11.43 ≈ 494 万 输出tok · 已用 $0.57 ≈ 24.5 万 输出tok
+               ↑ time elapsed 71.2%
+$11.43 ≈ 494k tok left · $0.57 ≈ 24.5k tok used
 ```
 
-| 元素 | 含义 |
+| Element | Meaning |
 |---|---|
-| 绿色填充 | 用量进度（usage %） |
-| 竖线 | 同一窗口内「时间已过」进度 |
-| `-66pt` | 用量% − 时间%；**正数（红）= 用太快**，**负数（绿）= 用太慢**，灰 = 基本同步 |
-| `剩 $… ≈ … 输出tok` | 剩余金额按常规配比折算成还能产出的输出 token 数 |
+| Green fill | Usage progress (usage %) |
+| Vertical line | "Time elapsed" progress within the same window |
+| `-66pt` | usage% − time%; **positive (red) = ahead**, **negative (green) = behind**, gray = on track |
+| `$… ≈ … tok left / used` | Remaining spend, converted to output tokens using the typical token mix |
 
-## 金额 ⇄ 输出 token 换算
+## Spend ⇄ output-token conversion
 
-任务运行时界面只会实时显示**输出词元**，所以把额度进度折算成输出 token 更直观。
+While a task runs, the UI only shows **output tokens** live, so converting the quota bar into output tokens makes the number directly comparable.
 
-- 单价（$/M，DeepSeek V4.1 Flash @ Go）：输入 `0.15` / 输出 `0.60` / 缓存读 `0.003`
-- 常规配比（2026-09-23 账单实测：输入 4.47% / 输出 0.55% / 缓存 94.8%）：每 1 个输出 token 配 `8.03` 输入 + `170.5` 缓存读 token
-- 综合成本 = `0.60 + 8.03×0.15 + 170.5×0.003 = $2.316 / M 输出tok`
-- 反算：`输出tok = microCents ÷ 231.6`（满额参照：$12≈518 万 · $30≈1295 万 · $60≈2591 万）
+- Unit prices ($/M, DeepSeek V4.1 Flash on Go): input `0.15` / output `0.60` / cache-read `0.003`
+- Typical mix (measured from the 2026-09-23 bill: input 4.47% / output 0.55% / cache 94.8%): per 1 output token → `8.03` input + `170.5` cache-read tokens
+- Blended cost = `0.60 + 8.03×0.15 + 170.5×0.003 = $2.316 per 1M output tok`
+- Inverse: `output tok = microCents ÷ 231.6` (full-quota reference: $12 ≈ 5.18M · $30 ≈ 12.9M · $60 ≈ 25.9M)
 
-三个系数（`P_IN / P_OUT / P_CACHE / K_IN / K_CACHE`）都在脚本顶部，换模型或配比变了直接改常量即可。
+All five constants (`P_IN / P_OUT / P_CACHE / K_IN / K_CACHE`) sit at the top of the script — change them if the model or your mix changes.
 
-## 安装
+## Install
 
-1. 给浏览器装 [Tampermonkey](https://www.tampermonkey.net/)（Chrome / Edge / Firefox 均可）
-2. 用 **raw 直链**安装（Tampermonkey 只拦截 raw 响应，GitHub 文件预览页不会触发）：
+1. Install [Tampermonkey](https://www.tampermonkey.net/) (Chrome / Edge / Firefox).
+2. Install from the **raw** link (Tampermonkey only intercepts raw responses — GitHub's file preview page will not trigger it):
 
    <https://raw.githubusercontent.com/craig90x/opencode-go-pace/main/opencode-go-pace.user.js>
 
-   → 弹出安装页 → 安装。（兜底：也可以新建脚本后整段粘贴）
-3. 打开 opencode.ai Console 的 **Go** 页，刻度自动出现
+   → Tampermonkey shows the install page → Install. (Fallback: create a new script and paste the whole file.)
+3. Open the **Go** page in the opencode.ai Console — the tick appears automatically.
 
-> ⚠️ 在仓库页点文件名只会打开 GitHub 的**文件预览页**（HTML），Tampermonkey 不拦截、不弹安装 —— 必须用上面的 raw 直链。装好后脚本的 `@updateURL` 指向同一个 raw 地址，以后改版会自动更新。
+> ⚠️ Clicking the filename on the repo page only opens GitHub's **file preview** (HTML), which Tampermonkey does not intercept. Use the raw link above. The script's `@updateURL` points at that same raw URL, so future versions update automatically.
 
-脚本按 `https://opencode.ai/console/*` 生效，只改前端渲染。
+The script matches `https://opencode.ai/console/*` and only touches front-end rendering.
 
-## 原理
+## How it works
 
-Console 的 Go 页本身会请求同源接口：
+The Console's Go page already calls a same-origin endpoint:
 
 ```
-GET /console/api/go/status        # 需要 x-org-id 头 + 登录态
+GET /console/api/go/status        # needs the x-org-id header + a signed-in session
 ```
 
-返回每条 meter 的精确窗口与用量：
+It returns the exact window and usage for each meter:
 
 ```json
 {
@@ -63,21 +63,19 @@ GET /console/api/go/status        # 需要 x-org-id 头 + 登录态
 }
 ```
 
-脚本复用这个接口（同源、自带 cookie，无需额外凭据），所以时间刻度是
+The script reuses that endpoint (same-origin, cookies included, no extra credentials), so the tick is computed from the **real window bounds**, not a hard-coded "5h / 7d / 30d":
 
 ```
 timeFrac = (now - startsAt) / (resetsAt - startsAt)
 ```
 
-用**真实窗口起止**算出来的，不靠硬编码「5h / 7d / 30d」。
+DOM anchors: three `[role="progressbar"]` elements whose `aria-label`s are `Rolling usage used` / `Weekly usage used` / `Monthly usage used`; the fill width uses `flex: N 1 0%`. When the API is unavailable it falls back to `aria-valuenow` plus the row header's `span[title]` reset time and a known window length.
 
-DOM 锚点：三条 `[role="progressbar"]`，`aria-label` 分别是 `Rolling usage used` / `Weekly usage used` / `Monthly usage used`；fill 宽度用 `flex: N 1 0%`。接口拿不到时回退到 `aria-valuenow` + 行头 `span[title]` 的 reset 时刻 + 已知周期长度。
+## Limitations
 
-## 限制
-
-- 纯前端注入，不发任何外部请求
-- 依赖上面那两个锚点；opencode 改版后可能失效，改版后按真实 DOM 重新定位即可
-- 需要处于 console 登录态
+- Pure front-end injection; no external requests
+- Depends on the two anchors above; an opencode redesign may break it — re-locate against the real DOM if that happens
+- Requires an active Console session
 
 ## License
 

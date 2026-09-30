@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         OpenCode Go 套餐用量节奏标尺
 // @namespace    openclaw.local.opencode-go-pace
-// @version      1.1.0
-// @description  在 Go 套餐三条 usage 进度条上叠加「时间已过」刻度 + pace 差值；并按 DeepSeek V4.1 Flash 常规配比换算「剩余金额 ≈ 还能产出多少输出 token」
+// @version      1.1.1
+// @description  Overlay a "time elapsed" tick + pace delta on the Go plan usage bars, and convert remaining spend into output tokens (DeepSeek V4.1 Flash typical mix)
 // @author       craig90x
 // @license      MIT
 // @homepageURL  https://github.com/craig90x/opencode-go-pace
@@ -23,19 +23,19 @@
   var FALLBACK_DUR = { fiveHour: 5 * 3600e3, week: 7 * 86400e3, month: 30 * 86400e3 };
   var pct = function (x) { return (x * 100).toFixed(1) + "%"; };
 
-  // —— V4.1 Flash @ Go 套餐：金额 ⇄ 输出 token 换算 ——
-  // 单价 $/M：输入 / 输出 / 缓存读
+  // —— Spend ⇄ output-token conversion (DeepSeek V4.1 Flash on Go) ——
+  // Unit prices, $ per 1M tokens: input / output / cache-read
   var P_IN = 0.15, P_OUT = 0.60, P_CACHE = 0.003;
-  // 常规配比（2026-09-23 账单实测 输入4.47%/输出0.55%/缓存94.8%）：
-  // 每 1 个输出 token 对应的输入 / 缓存读 token 数
+  // Typical mix (measured 2026-09-23: input 4.47% / output 0.55% / cache 94.8%):
+  // input and cache-read tokens per 1 output token
   var K_IN = 8.03, K_CACHE = 170.5;
-  var COST_PER_M_OUT = P_OUT + K_IN * P_IN + K_CACHE * P_CACHE; // ≈ $2.316 / M 输出tok
-  var MC_PER_TOK = 100 * COST_PER_M_OUT;                        // ≈ 231.6 microCents / 输出tok
+  var COST_PER_M_OUT = P_OUT + K_IN * P_IN + K_CACHE * P_CACHE; // ≈ $2.316 per 1M output tok
+  var MC_PER_TOK = 100 * COST_PER_M_OUT;                        // ≈ 231.6 microCents per output tok
 
   function fmtTok(t) {
     if (!isFinite(t) || t < 0) return "–";
-    if (t >= 1e8) return (t / 1e8).toFixed(2) + " 亿";
-    if (t >= 1e4) return (t / 1e4).toFixed(t >= 1e6 ? 0 : 1) + " 万";
+    if (t >= 1e6) return (t / 1e6).toFixed(2) + "M";
+    if (t >= 1e3) return (t / 1e3).toFixed(t >= 1e5 ? 0 : 1) + "k";
     return String(Math.round(t));
   }
   function fmtUsd(mc) { return "$" + (mc / 1e8).toFixed(2); }
@@ -79,7 +79,7 @@
           var e = Date.parse(meter.resetsAt);
           timeFrac = (now - s) / (e - s);
         } else {
-          // 兜底：用 aria-valuenow + reset 标题 + 已知周期长度
+          // Fallback: aria-valuenow + reset tooltip + known window length
           usedFrac = Number(bar.getAttribute("aria-valuenow")) / 100;
           var span = row && row.querySelector("span[title]");
           var e2 = span
@@ -95,7 +95,7 @@
         var under = delta < -0.02;
         var color = over ? "#dc2626" : under ? "#059669" : "#6b7280";
 
-        // 1) 进度条上的「时间已过」刻度
+        // 1) "time elapsed" tick on the bar
         var tick = bar.querySelector(".oc-pace-tick");
         if (!tick) {
           bar.style.position = "relative";
@@ -114,9 +114,9 @@
           tick.style.background = over ? "#dc2626" : "#111827";
           tick.style.left = "calc((100% - 4px) * " + timeFrac + ")";
         }
-        tick.title = "时间已过 " + pct(timeFrac) + " · 用量 " + pct(usedFrac);
+        tick.title = "time elapsed " + pct(timeFrac) + " · used " + pct(usedFrac);
 
-        // 2) 头部差值标签
+        // 2) pace delta chip in the header
         var chip = row && row.querySelector(".oc-pace-chip");
         if (row && !chip) {
           chip = document.createElement("span");
@@ -130,15 +130,15 @@
           var txt = (pts > 0 ? "+" : "") + pts + "pt";
           if (chip.textContent !== txt) {
             chip.textContent = txt;
-            chip.title = "用量 " + pct(usedFrac) + " / 时间 " + pct(timeFrac) +
-              "（" + (over ? "用太快" : under ? "用太慢" : "基本同步") + "）";
+            chip.title = "used " + pct(usedFrac) + " / time " + pct(timeFrac) +
+              " (" + (over ? "ahead of schedule" : under ? "behind schedule" : "on track") + ")";
             chip.style.cssText = "margin-left:2px;padding:0 4px;border-radius:3px;font-size:0.6875rem;" +
               "font-variant-numeric:tabular-nums;line-height:1.35;color:" + color +
               ";background:" + color + "1a;box-shadow:inset 0 0 0 0.5px " + color + "33";
           }
         }
 
-        // 3) 金额 ⇄ 输出 token
+        // 3) spend ⇄ output tokens
         if (row && meter && meter.limitMicroCents) {
           var tokEl = row.querySelector(".oc-pace-tok");
           if (!tokEl) {
@@ -152,12 +152,12 @@
           var lim = Number(meter.limitMicroCents);
           var used = Number(meter.usedMicroCents);
           var rem = Math.max(0, lim - used);
-          var txt2 = "剩 " + fmtUsd(rem) + " ≈ " + fmtTok(rem / MC_PER_TOK) + " 输出tok" +
-            " · 已用 " + fmtUsd(used) + " ≈ " + fmtTok(used / MC_PER_TOK) + " 输出tok";
+          var txt2 = fmtUsd(rem) + " ≈ " + fmtTok(rem / MC_PER_TOK) + " tok left" +
+            " · " + fmtUsd(used) + " ≈ " + fmtTok(used / MC_PER_TOK) + " tok used";
           if (tokEl.textContent !== txt2) {
             tokEl.textContent = txt2;
-            tokEl.title = "按 V4.1 Flash 常规配比换算（每输出tok 配 " + K_IN + " 输入 / " +
-              K_CACHE + " 缓存读；单价 " + P_IN + "/" + P_OUT + "/" + P_CACHE + " $每M）";
+            tokEl.title = "V4.1 Flash typical mix: per output tok " + K_IN + " input / " +
+              K_CACHE + " cache-read; prices " + P_IN + "/" + P_OUT + "/" + P_CACHE + " $ per M";
           }
         }
       });
