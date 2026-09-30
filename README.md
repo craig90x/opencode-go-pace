@@ -30,9 +30,14 @@ Rolling usage  4%  [-66pt]                 Resets in 1h 31m
 ## 安装
 
 1. 给浏览器装 [Tampermonkey](https://www.tampermonkey.net/)（Chrome / Edge / Firefox 均可）
-2. 点开 [`opencode-go-pace.user.js`](./opencode-go-pace.user.js) → Tampermonkey 会弹出安装页 → 安装
-   （也可以新建脚本后整段粘贴）
+2. 用 **raw 直链**安装（Tampermonkey 只拦截 raw 响应，GitHub 文件预览页不会触发）：
+
+   <https://raw.githubusercontent.com/craig90x/opencode-go-pace/main/opencode-go-pace.user.js>
+
+   → 弹出安装页 → 安装。（兜底：也可以新建脚本后整段粘贴）
 3. 打开 opencode.ai Console 的 **Go** 页，刻度自动出现
+
+> ⚠️ 在仓库页点文件名只会打开 GitHub 的**文件预览页**（HTML），Tampermonkey 不拦截、不弹安装 —— 必须用上面的 raw 直链。装好后脚本的 `@updateURL` 指向同一个 raw 地址，以后改版会自动更新。
 
 脚本按 `https://opencode.ai/console/*` 生效，只改前端渲染。
 
