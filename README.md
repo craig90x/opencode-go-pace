@@ -1,20 +1,22 @@
 # opencode-go-pace
 
-Overlays a **"time elapsed" tick** on the Go plan usage bars in the [opencode.ai](https://opencode.ai) Console — see at a glance whether you're burning quota faster or slower than the clock. It also converts **spend into output tokens**, so the number lines up with the output tokens streaming while a task runs.
+Overlays a **"time left" tick** on the Go plan usage bars in the [opencode.ai](https://opencode.ai) Console — see at a glance whether the quota you have left is running ahead of or behind the clock. It also converts **spend into output tokens**, so the number lines up with the output tokens streaming while a task runs.
 
 ```
-Rolling usage  4%  [-66pt]                 Resets in 1h 31m
-██░░░░░░░░░░░░|░░░░░░░░░░░░░░░░░░░░░░░░░
-               ↑ time elapsed 71.2%
-$11.43 ≈ 494k tok left · $0.57 ≈ 24.5k tok used
+Rolling usage  99% left  [+66pt]           Resets in 1h 39m
+█████████████|███████████████████████░░░░
+             ↑ time left 32.7%
+$11.83 ≈ 5.11M tok left · $0.17 ≈ 72.1k tok used
 ```
 
 | Element | Meaning |
 |---|---|
-| Green fill | Usage progress (usage %) |
-| Vertical line | "Time elapsed" progress within the same window |
-| `-66pt` | usage% − time%; **positive (red) = ahead**, **negative (green) = behind**, gray = on track |
+| Green fill | **Remaining** quota (usage left %) — matches the Console's own bar |
+| Vertical line | "Time left" progress within the same window (`1 − elapsed`) |
+| `+66pt` | remaining% − time-left%; **positive (green) = slack**, **negative (red) = burning fast**, gray = on track |
 | `$… ≈ … tok left / used` | Remaining spend, converted to output tokens using the typical token mix |
+
+> **v1.1.2 note:** the Console switched its bars from "% used" to "% left" and flipped the fill to represent remaining quota. The overlay was re-anchored to the new DOM (`aria-label` now ends in `left`, `aria-valuenow` is the remaining %). The tick now marks **time left** and the delta is a **slack** figure — a positive `pt` is good (green), the opposite sign convention from v1.1.1 and earlier.
 
 ## Spend ⇄ output-token conversion
 
@@ -69,7 +71,7 @@ The script reuses that endpoint (same-origin, cookies included, no extra credent
 timeFrac = (now - startsAt) / (resetsAt - startsAt)
 ```
 
-DOM anchors: three `[role="progressbar"]` elements whose `aria-label`s are `Rolling usage used` / `Weekly usage used` / `Monthly usage used`; the fill width uses `flex: N 1 0%`. When the API is unavailable it falls back to `aria-valuenow` plus the row header's `span[title]` reset time and a known window length.
+DOM anchors: three `[role="progressbar"]` elements whose `aria-label`s are `Rolling usage left` / `Weekly usage left` / `Monthly usage left` (the trailing word has been `used` in older builds — the script matches the stable `Rolling`/`Weekly`/`Monthly usage` prefix). `aria-valuenow` is the **remaining** %; the fill child `[data-slot="progress-fill"]` uses `flex: N 1 0%`. When the API is unavailable it falls back to `aria-valuenow` (inverted when the label reads `left`) plus the row header's `span[title]` reset time and a known window length.
 
 ## Limitations
 

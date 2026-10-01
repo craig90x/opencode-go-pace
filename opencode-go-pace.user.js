@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         OpenCode Go 套餐用量节奏标尺
 // @namespace    openclaw.local.opencode-go-pace
-// @version      1.1.1
-// @description  Overlay a "time elapsed" tick + pace delta on the Go plan usage bars, and convert remaining spend into output tokens (DeepSeek V4.1 Flash typical mix)
+// @version      1.1.2
+// @description  Overlay a "time left" tick + slack delta on the Go plan "usage left" bars, and convert remaining spend into output tokens (DeepSeek V4.1 Flash typical mix)
 // @author       craig90x
 // @license      MIT
 // @homepageURL  https://github.com/craig90x/opencode-go-pace
@@ -19,7 +19,8 @@
   if (window.__ocPaceInstalled) return;
   window.__ocPaceInstalled = true;
 
-  var LABEL = { fiveHour: "Rolling usage", week: "Weekly usage", month: "Monthly usage" };
+  // LC prefix is stable; the trailing word changed ("... used" → "... left"/"... remaining")
+  var LABEL = { fiveHour: "rolling usage", week: "weekly usage", month: "monthly usage" };
   var FALLBACK_DUR = { fiveHour: 5 * 3600e3, week: 7 * 86400e3, month: 30 * 86400e3 };
   var pct = function (x) { return (x * 100).toFixed(1) + "%"; };
 
@@ -45,6 +46,19 @@
     return m ? m[1] : null;
   }
 
+  // Match a progressbar to a meter key by its stable label prefix.
+  function keyFor(ariaLabel) {
+    var s = (ariaLabel || "").trim().toLowerCase();
+    if (!s) return null;
+    for (var k in LABEL) if (s.indexOf(LABEL[k]) === 0) return k;
+    return null;
+  }
+  // The bar now counts down ("99% left"); older builds counted up ("4% used").
+  function isRemaining(ariaLabel, ariaValueText) {
+    var s = ((ariaLabel || "") + " " + (ariaValueText || "")).toLowerCase();
+    return s.indexOf("left") >= 0 || s.indexOf("remaining") >= 0;
+  }
+
   var cache = { at: 0, data: null };
   function fetchStatus(org) {
     if (Date.now() - cache.at < 60000) return Promise.resolve(cache.data);
@@ -64,14 +78,13 @@
       var now = Date.now();
       var bars = document.querySelectorAll('[role="progressbar"]');
       Array.prototype.forEach.call(bars, function (bar) {
-        var label = (bar.getAttribute("aria-label") || "").replace(/\s*used$/, "");
-        var key = null;
-        for (var k in LABEL) if (LABEL[k] === label) key = k;
+        var ariaLabel = bar.getAttribute("aria-label") || "";
+        var key = keyFor(ariaLabel);
         if (!key) return;
 
         var row = bar.closest("div.flex.flex-1") || bar.parentElement;
         var meter = data && data.access && data.access.meters ? data.access.meters[key] : null;
-        var usedFrac, timeFrac;
+        var usedFrac, remFrac, timeFrac;
 
         if (meter && meter.limitMicroCents) {
           usedFrac = Number(meter.usedMicroCents) / Number(meter.limitMicroCents);
@@ -80,7 +93,8 @@
           timeFrac = (now - s) / (e - s);
         } else {
           // Fallback: aria-valuenow + reset tooltip + known window length
-          usedFrac = Number(bar.getAttribute("aria-valuenow")) / 100;
+          var vn = Number(bar.getAttribute("aria-valuenow")) / 100;
+          usedFrac = isRemaining(ariaLabel, bar.getAttribute("aria-valuetext")) ? 1 - vn : vn;
           var span = row && row.querySelector("span[title]");
           var e2 = span
             ? Date.parse(span.getAttribute("title").replace(/\//g, "-").replace(" ", "T"))
@@ -89,16 +103,20 @@
         }
         if (!isFinite(usedFrac) || !isFinite(timeFrac)) return;
 
+        usedFrac = Math.max(0, Math.min(1, usedFrac));
         timeFrac = Math.max(0, Math.min(1, timeFrac));
-        var delta = usedFrac - timeFrac;
-        var over = delta > 0.02;
-        var under = delta < -0.02;
-        var color = over ? "#dc2626" : under ? "#059669" : "#6b7280";
+        remFrac = 1 - usedFrac;                 // bar fills with what's LEFT
+        var timeLeftFrac = 1 - timeFrac;        // where "time left" sits on the same axis
+        var slack = remFrac - timeLeftFrac;     // >0 = quota left ahead of the clock (good)
+        var fast = slack < -0.02;               // burning faster than the clock
+        var safe = slack > 0.02;                // running with slack
+        var color = fast ? "#dc2626" : safe ? "#059669" : "#6b7280";
 
-        // 1) "time elapsed" tick on the bar
+        // 1) "time left" tick on the bar
         var tick = bar.querySelector(".oc-pace-tick");
         if (!tick) {
           bar.style.position = "relative";
+          bar.style.overflow = "visible";
           tick = document.createElement("div");
           tick.className = "oc-pace-tick";
           bar.appendChild(tick);
@@ -108,15 +126,15 @@
             "pointer-events:none",
           ].join(";");
         }
-        var sig = timeFrac.toFixed(4) + (over ? "o" : under ? "u" : "n");
+        var sig = timeLeftFrac.toFixed(4) + (fast ? "f" : "");
         if (tick.getAttribute("data-sig") !== sig) {
           tick.setAttribute("data-sig", sig);
-          tick.style.background = over ? "#dc2626" : "#111827";
-          tick.style.left = "calc((100% - 4px) * " + timeFrac + ")";
+          tick.style.background = fast ? "#dc2626" : "#111827";
+          tick.style.left = "calc((100% - 4px) * " + timeLeftFrac + ")";
         }
-        tick.title = "time elapsed " + pct(timeFrac) + " · used " + pct(usedFrac);
+        tick.title = "time left " + pct(timeLeftFrac) + " · remaining " + pct(remFrac);
 
-        // 2) pace delta chip in the header
+        // 2) slack chip in the header
         var chip = row && row.querySelector(".oc-pace-chip");
         if (row && !chip) {
           chip = document.createElement("span");
@@ -126,12 +144,12 @@
           holder.appendChild(chip);
         }
         if (chip) {
-          var pts = Math.round(delta * 100);
+          var pts = Math.round(slack * 100);
           var txt = (pts > 0 ? "+" : "") + pts + "pt";
           if (chip.textContent !== txt) {
             chip.textContent = txt;
-            chip.title = "used " + pct(usedFrac) + " / time " + pct(timeFrac) +
-              " (" + (over ? "ahead of schedule" : under ? "behind schedule" : "on track") + ")";
+            chip.title = "remaining " + pct(remFrac) + " / time left " + pct(timeLeftFrac) +
+              " (" + (fast ? "burning fast" : safe ? "slack" : "on track") + ")";
             chip.style.cssText = "margin-left:2px;padding:0 4px;border-radius:3px;font-size:0.6875rem;" +
               "font-variant-numeric:tabular-nums;line-height:1.35;color:" + color +
               ";background:" + color + "1a;box-shadow:inset 0 0 0 0.5px " + color + "33";
