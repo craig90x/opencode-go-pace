@@ -1,22 +1,24 @@
 # opencode-go-pace
 
-Overlays a **"time left" tick** on the Go plan usage bars in the [opencode.ai](https://opencode.ai) Console — see at a glance whether the quota you have left is running ahead of or behind the clock. It also converts **spend into output tokens**, so the number lines up with the output tokens streaming while a task runs.
+Overlays a **"time elapsed" tick** on the Go plan usage bars in the [opencode.ai](https://opencode.ai) Console — see at a glance whether your usage is running ahead of or behind the clock. It also converts **spend into output tokens**, so the number lines up with the output tokens streaming while a task runs.
 
 ```
-Rolling usage  99% left  [+66pt]           Resets in 1h 39m
-█████████████|███████████████████████░░░░
-             ↑ time left 32.7%
+Rolling usage  4% used  [+13pt]           Resets in 1h 39m
+█░░░░░░░░░░░░|░░░░░░░░░░░░░░░░░░░░░░░░░░░
+             ↑ time elapsed 13.0%
 $11.83 ≈ 5.11M tok left · $0.17 ≈ 72.1k tok used
 ```
 
 | Element | Meaning |
 |---|---|
-| Green fill | **Remaining** quota (usage left %) — matches the Console's own bar |
-| Vertical line | "Time left" progress within the same window (`1 − elapsed`) |
-| `+66pt` | remaining% − time-left%; **positive (green) = slack**, **negative (red) = burning fast**, gray = on track |
+| Green fill | **Used** quota (usage %) — matches the Console's own forward bar |
+| Vertical line | "Time elapsed" progress within the same window |
+| `+13pt` | used% − elapsed%; **positive (red) = ahead of schedule**, **negative (green) = behind**, gray = on track |
 | `$… ≈ … tok left / used` | Remaining spend, converted to output tokens using the typical token mix |
 
-> **v1.1.2 note:** the Console switched its bars from "% used" to "% left" and flipped the fill to represent remaining quota. The overlay was re-anchored to the new DOM (`aria-label` now ends in `left`, `aria-valuenow` is the remaining %). The tick now marks **time left** and the delta is a **slack** figure — a positive `pt` is good (green), the opposite sign convention from v1.1.1 and earlier.
+> **v1.1.3 note (current):** the Console reverted to its forward "% used" bars, so this build restores the v1.1.1 overlay — tick marks **time elapsed**, delta is `used − time`, and a positive `pt` is **bad** (red). This is the intended behavior for the current Console DOM.
+>
+> **v1.1.2 note (historical):** briefly, the Console showed "% left" bars; that build re-anchored the overlay to `time left` / slack. Kept in history only.
 
 ## Spend ⇄ output-token conversion
 
